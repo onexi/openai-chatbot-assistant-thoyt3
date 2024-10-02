@@ -1,83 +1,45 @@
+// scripts.js
+
+// State object to keep track of the thread and messages
 let state = {
-  assistant_id: null,
-  assistant_name: null,
   threadId: null,
   messages: [],
 };
 
-async function getAssistant() {
-  const name = document.getElementById('assistant_name').value.trim();
-  if (!name) {
-    writeToMessages('Please enter an assistant name.');
-    return;
-  }
-
+// Function to create a new thread
+async function createThread() {
   try {
-    const response = await fetch('/api/assistants', {
+    const response = await fetch('/api/threads', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ name }),
     });
 
     if (!response.ok) {
       const errorData = await response.json();
-      throw new Error(errorData.error.message || 'Failed to retrieve assistant');
-    }
-
-    const data = await response.json();
-    if (!data.assistant_id) {
-      throw new Error('No assistant ID returned');
-    }
-
-    state.assistant_id = data.assistant_id;
-    state.assistant_name = data.assistant_name;
-    writeToMessages(`Assistant ${state.assistant_name} is ready to chat`);
-  } catch (error) {
-    console.error('Error fetching assistant:', error);
-    writeToMessages(`Error fetching assistant: ${error.message}`);
-  }
-}
-
-
-async function getThread() {
-  try {
-    const response = await fetch('/api/threads', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ assistantId: state.assistant_id }),
-    });
-
-    if (!response.ok) {
-      throw new Error('Failed to create thread');
+      throw new Error(errorData.error || 'Failed to create thread');
     }
 
     const data = await response.json();
     state.threadId = data.threadId;
     state.messages = [];
-    writeToMessages(`New thread created with ID: ${state.threadId}`);
+    writeToMessages('New thread created.');
   } catch (error) {
     console.error('Error creating thread:', error);
-    writeToMessages('Error creating thread');
+    writeToMessages(`Error: ${error.message}`);
   }
 }
 
-async function getResponse() {
+// Function to send a message
+async function sendMessage() {
   const messageInput = document.getElementById('messageInput');
   const message = messageInput.value.trim();
 
-  if (!message) {
+  if (!message || !state.threadId) {
     return;
   }
 
   try {
-    state.messages.push({ role: 'user', content: message });
-    writeToMessages(`You: ${message}`);
-
-    const response = await fetch('/api/run', {
+    // Add user message to the thread
+    await fetch(`/api/threads/${state.threadId}/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -85,30 +47,76 @@ async function getResponse() {
       body: JSON.stringify({ message }),
     });
 
-    if (!response.ok) {
-      throw new Error('Failed to send message');
-    }
+    writeToMessages(`You: ${message}`, 'user');
 
-    const data = await response.json();
-    const messages = data.messages;
+    // Run the thread
+    await runThread();
 
-    for (const msg of messages) {
-      const role = msg.role === 'user' ? 'You' : 'Assistant';
-      writeToMessages(`${role}: ${msg.content}`);
-    }
+    // Retrieve messages
+    await getMessages();
   } catch (error) {
     console.error('Error sending message:', error);
-    writeToMessages('Error sending message');
+    writeToMessages(`Error: ${error.message}`);
   } finally {
     messageInput.value = '';
   }
 }
 
-function writeToMessages(message) {
+// Function to run the thread
+async function runThread() {
+  try {
+    const response = await fetch(`/api/threads/${state.threadId}/run`, {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to run thread');
+    }
+  } catch (error) {
+    console.error('Error running thread:', error);
+    writeToMessages(`Error: ${error.message}`);
+  }
+}
+
+// Function to get messages from the thread
+async function getMessages() {
+  try {
+    const response = await fetch(`/api/threads/${state.threadId}/messages`);
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to get messages');
+    }
+
+    const data = await response.json();
+    const messagesContainer = document.getElementById('message-container');
+    messagesContainer.innerHTML = ''; // Clear existing messages
+
+    data.messages.forEach((msg) => {
+      if (msg.role === 'user') {
+        writeToMessages(`You: ${msg.content}`, 'user');
+      } else if (msg.role === 'assistant') {
+        writeToMessages(`Assistant: ${msg.content}`, 'assistant');
+      }
+    });
+  } catch (error) {
+    console.error('Error getting messages:', error);
+    writeToMessages(`Error: ${error.message}`);
+  }
+}
+
+// Function to display messages
+function writeToMessages(message, role = '') {
   const messageContainer = document.getElementById('message-container');
   const messageElement = document.createElement('div');
   messageElement.textContent = message;
-  messageElement.className = 'message';
+  messageElement.className = `message ${role}`;
   messageContainer.appendChild(messageElement);
   messageContainer.scrollTop = messageContainer.scrollHeight;
 }
+
+// Initialize the application
+document.addEventListener('DOMContentLoaded', () => {
+  createThread();
+});
