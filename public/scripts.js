@@ -20,18 +20,77 @@ async function getAssistant(){
   console.log(`back from fetch with state: ${JSON.stringify(state)}`)
 }
 
-async function getThread(){
+async function getThread() {
+  try {
+    const response = await fetch('/api/threads', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ assistantId: state.assistant_id }),
+    });
 
-// Enter Code Here
+    if (!response.ok) {
+      throw new Error('Failed to create thread');
+    }
 
+    const data = await response.json();
+    state.threadId = data.threadId;
+    state.messages = []; // Reset messages
+    writeToMessages(`New thread created with ID: ${state.threadId}`);
+  } catch (error) {
+    console.error('Error creating thread:', error);
+    writeToMessages('Error creating thread');
+  }
 }
-async function getResponse(){
 
-// Enter Code Here
+async function getResponse() {
+  const messageInput = document.getElementById('messageInput');
+  const message = messageInput.value.trim();
 
+  if (!message) {
+    return; // Don't send empty messages
+  }
+
+  try {
+    // Add the user's message to the chat
+    state.messages.push({ role: 'user', content: message });
+    writeToMessages(`You: ${message}`);
+
+    // Send the message to the server
+    const response = await fetch('/api/run', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ message: message }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to send message');
+    }
+
+    const data = await response.json();
+    const messages = data.messages;
+
+    // Display all messages
+    for (const msg of messages) {
+      const role = msg.role === 'user' ? 'You' : 'Assistant';
+      writeToMessages(`${role}: ${msg.content}`);
+    }
+  } catch (error) {
+    console.error('Error sending message:', error);
+    writeToMessages('Error sending message');
+  } finally {
+    messageInput.value = ''; // Clear the input field
+  }
 }
-async function writeToMessages(message){
-  let messageDiv = document.getElementById("message-container");
-  messageDiv.innerHTML = message;
-  document.getElementById('messages').appendChild(messageDiv);
+
+async function writeToMessages(message) {
+  const messageContainer = document.getElementById('message-container');
+  const messageElement = document.createElement('div');
+  messageElement.textContent = message;
+  messageElement.className = 'message';
+  messageContainer.appendChild(messageElement);
+  messageContainer.scrollTop = messageContainer.scrollHeight; // Scroll to the bottom
 }
