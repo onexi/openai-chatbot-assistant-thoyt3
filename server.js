@@ -1,15 +1,18 @@
-// Load environment variables
 import dotenv from 'dotenv';
 dotenv.config();
 import OpenAI from 'openai';
 import express from 'express';
 import cors from 'cors';
 import bodyParser from 'body-parser';
-// If using Node.js < 18, uncomment the next line
-// const fetch = require('node-fetch');
+import fs from 'fs';
+import path from 'path';
 
 const app = express();
 const PORT = 3000;
+
+// Load product data
+const bankProducts = JSON.parse(fs.readFileSync(path.resolve('bank_products.json'), 'utf-8'));
+const groceryProducts = JSON.parse(fs.readFileSync(path.resolve('grocery_products.json'), 'utf-8'));
 
 // Middleware
 app.use(cors());
@@ -23,44 +26,55 @@ let state = {
   threadId: null,
   messages: [],
 };
+
 const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-// Route to get the list of Assistants
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Route to get the list of Products
+app.get('/api/products', (req, res) => {
+  const { type } = req.query;
+  if (type === 'bank') {
+    res.json(bankProducts);
+  } else if (type === 'grocery') {
+    res.json(groceryProducts);
+  } else {
+    res.status(400).json({ error: 'Invalid product type' });
+  }
+});
+
+// Route to get the Assistant
 app.post('/api/assistants', async (req, res) => {
-  let assistant_id = req.body.name;
-    try {
-        let myAssistant = await openai.beta.assistants.retrieve(
-          assistant_id
-        );
-        console.log(myAssistant);
-              // Extract the list of assistants from 'data.data'
-        state.assistant_id = myAssistant.id; // Updated line
-        state.assistant_name = myAssistant.name; // Updated line
-        res.status(200).json(state);
-      }
-      catch{
-        if (!myAssistant.ok) {
-          const errorText = await myAssistant.text;
-          console.error('Error fetching assistants:', errorText);
-          return res.status(myAssistant.status).json({ error: 'Failed to fetch assistants' });
-        }
-      }
-  });
-  
+  const assistant_id = req.body.name;
+  try {
+    const myAssistant = await openai.beta.assistants.retrieve(assistant_id);
+
+    if (!myAssistant) {
+      throw new Error('Failed to retrieve assistant');
+    }
+
+    state.assistant_id = myAssistant.id;
+    state.assistant_name = myAssistant.name;
+    res.status(200).json(state);
+  } catch (error) {
+    console.error('Error fetching assistant:', error);
+    res.status(500).json({ error: 'Failed to fetch assistant' });
+  }
+});
 
 // Route to create a new Thread
 app.post('/api/threads', async (req, res) => {
   const { assistantId } = req.body;
   try {
-    let response = await openai.beta.threads.create()
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Error creating thread:', errorText);
-      return res.status(response.status).json({ error: 'Failed to create thread' });
+    const response = await openai.beta.threads.create({
+      assistant_id: assistantId,
+    });
+
+    if (!response) {
+      throw new Error('Failed to create thread');
     }
 
-    const data = await response.json();
+    const data = response.data;
     state.threadId = data.id;
     state.messages = []; // Reset messages
     res.json({ threadId: state.threadId });
@@ -75,31 +89,17 @@ app.post('/api/run', async (req, res) => {
   const { message } = req.body;
   state.messages.push({ role: 'user', content: message });
   try {
-    await openai.beta.threads.messages.create(thread_id,
-        {
-            role: "user",
-            content: message,
-        })
-    // run and poll thread V2 API feature
-    let run = await openai.beta.threads.runs.createAndPoll(thread_id, {
-        assistant_id: state.assistant_id
-    })
-    let run_id = run.id;
-    state.run_id = run_id;
+    const runResponse = await openai.beta.threads.runs.createAndPoll(state.threadId, {
+      assistant_id: state.assistant_id,
+    });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Error running assistant:', errorText);
-      return res.status(response.status).json({ error: 'Failed to run assistant' });
+    if (!runResponse) {
+      throw new Error('Failed to run assistant');
     }
-    let messages = await openai.beta.threads.messages.list(thread_id);
-    let all_messages = [];
-    let role = "";
-    let content = "";
-   
-    if (assistantMessage) {
-      state.messages.push(assistantMessage);
-    }
+
+    const messages = await openai.beta.threads.messages.list(state.threadId);
+    state.messages = messages.data;
+
     res.json({ messages: state.messages });
   } catch (error) {
     console.error('Error running assistant:', error);
