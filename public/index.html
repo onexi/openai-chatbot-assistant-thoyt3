@@ -37,6 +37,14 @@
   <div class="container my-5">
     <h1 class="text-center">Assistant Chat</h1>
 
+    <!-- Assistant Selection -->
+    <div class="mb-3">
+      <label for="assistantSelect" class="form-label">Select Assistant</label>
+      <select id="assistantSelect" class="form-select" onchange="selectAssistant()">
+        <option selected disabled>Select an assistant</option>
+      </select>
+    </div>
+
     <!-- Message Display -->
     <div class="message-container" id="message-container"></div>
 

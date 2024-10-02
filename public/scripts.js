@@ -1,16 +1,57 @@
 // scripts.js
 
-// State object to keep track of the thread and messages
+// State object to keep track of the assistant, thread, and messages
 let state = {
+  assistant_id: null,
+  assistant_name: null,
   threadId: null,
   messages: [],
 };
+
+// Function to get the list of assistants and populate the dropdown
+async function getAssistants() {
+  try {
+    const response = await fetch('/api/assistants');
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to get assistants');
+    }
+
+    const data = await response.json();
+    const assistantSelect = document.getElementById('assistantSelect');
+
+    data.assistants.forEach((assistant) => {
+      const option = document.createElement('option');
+      option.value = assistant.id;
+      option.textContent = assistant.name;
+      assistantSelect.appendChild(option);
+    });
+  } catch (error) {
+    console.error('Error getting assistants:', error);
+    writeToMessages(`Error: ${error.message}`);
+  }
+}
+
+// Function to select an assistant
+function selectAssistant() {
+  const assistantSelect = document.getElementById('assistantSelect');
+  state.assistant_id = assistantSelect.value;
+  state.assistant_name = assistantSelect.options[assistantSelect.selectedIndex].text;
+
+  // Create a new thread with the selected assistant
+  createThread();
+}
 
 // Function to create a new thread
 async function createThread() {
   try {
     const response = await fetch('/api/threads', {
       method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ assistant_id: state.assistant_id }),
     });
 
     if (!response.ok) {
@@ -21,7 +62,7 @@ async function createThread() {
     const data = await response.json();
     state.threadId = data.threadId;
     state.messages = [];
-    writeToMessages('New thread created.');
+    writeToMessages(`New thread created with assistant: ${state.assistant_name}`);
   } catch (error) {
     console.error('Error creating thread:', error);
     writeToMessages(`Error: ${error.message}`);
@@ -118,5 +159,5 @@ function writeToMessages(message, role = '') {
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', () => {
-  createThread();
+  getAssistants();
 });

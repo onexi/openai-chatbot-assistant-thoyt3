@@ -21,9 +21,13 @@ const groceryProducts = JSON.parse(
   fs.readFileSync(path.resolve('grocery_products.json'), 'utf-8')
 );
 
-// Create a system prompt with detailed product information
-const systemPrompt = `
-You are an assistant knowledgeable about bank and grocery store products. Provide detailed information when asked.
+// Assistant storage (simulating assistants)
+let assistants = {
+  asst_1: {
+    id: 'asst_1',
+    name: 'Banking Assistant',
+    systemPrompt: `
+You are an assistant knowledgeable about bank products. Provide detailed information when asked.
 
 Bank Products:
 ${bankProducts
@@ -32,6 +36,13 @@ ${bankProducts
       `- ${product.name}: ${product.description}. Rate: ${product.rate}, Type: ${product.type}, Additional Info: ${product.additional}`
   )
   .join('\n')}
+`,
+  },
+  asst_2: {
+    id: 'asst_2',
+    name: 'Grocery Assistant',
+    systemPrompt: `
+You are an assistant knowledgeable about grocery products. Provide detailed information when asked.
 
 Grocery Products:
 ${groceryProducts
@@ -40,7 +51,9 @@ ${groceryProducts
       `- ${product.name}: ${product.description}. Price: ${product.price}, Type: ${product.type}, Additional Info: ${product.additional}`
   )
   .join('\n')}
-`;
+`,
+  },
+};
 
 // Middleware
 app.use(cors());
@@ -50,12 +63,34 @@ app.use(express.static('public')); // Serve static files from the 'public' direc
 // Thread storage
 let threads = {};
 
+// Route to get list of assistants
+app.get('/api/assistants', (req, res) => {
+  res.json({ assistants: Object.values(assistants) });
+});
+
+// Route to retrieve an assistant by ID
+app.get('/api/assistants/:assistantId', (req, res) => {
+  const { assistantId } = req.params;
+  const assistant = assistants[assistantId];
+  if (!assistant) {
+    return res.status(404).json({ error: 'Assistant not found' });
+  }
+  res.json({ assistant });
+});
+
 // Route to create a new thread
 app.post('/api/threads', (req, res) => {
+  const { assistant_id } = req.body;
+
+  const assistant = assistants[assistant_id];
+  if (!assistant) {
+    return res.status(404).json({ error: 'Assistant not found' });
+  }
+
   const threadId = `thread_${Date.now()}`;
   threads[threadId] = {
-    assistant: 'default_assistant',
-    messages: [{ role: 'system', content: systemPrompt }],
+    assistant_id,
+    messages: [{ role: 'system', content: assistant.systemPrompt }],
   };
   res.json({ threadId });
 });
