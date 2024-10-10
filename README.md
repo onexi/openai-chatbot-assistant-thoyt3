@@ -4,5 +4,5 @@
 
 collaborated with Ben Taylor on this project
 
-Using my own API key for this project
+Using my own API key for this project, but this is configured to work with any API Key in a .env file
 
